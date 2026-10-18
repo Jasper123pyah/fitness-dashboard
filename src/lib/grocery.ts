@@ -136,7 +136,7 @@ export function mergeGroceryItems(
   existing: GroceryItem[],
   generated: AggregatedGroceryLine[],
 ): MergeResult {
-  const existingByIngredient = new Map<string, GroceryItem>();
+  const fromMenu: GroceryItem[] = [];
   const keep: GroceryItem[] = [];
 
   for (const item of existing) {
@@ -144,25 +144,26 @@ export function mergeGroceryItems(
       keep.push(item);
       continue;
     }
-    existingByIngredient.set(`${item.ingredientId}::${item.unit ?? ""}`, item);
+    fromMenu.push(item);
   }
 
   const matchedIds = new Set<string>();
   const upsert: Omit<GroceryItem, "id" | "groceryListId">[] = [];
 
   generated.forEach((line, index) => {
-    const direct = existingByIngredient.get(
-      `${line.ingredientId}::${line.unit}`,
+    const candidates = fromMenu.filter(
+      (item) =>
+        item.ingredientId === line.ingredientId && !matchedIds.has(item.id),
     );
+    // Eerst dezelfde eenheid, dan een verenigbare. Een handmatig aangepaste
+    // regel hoort ook bij dit ingrediënt als de gebruiker de eenheid heeft
+    // veranderd (200 g tomaat → 3 stuks); anders zou die aanpassing verdwijnen.
     const compatible =
-      direct ??
-      [...existingByIngredient.values()].find(
-        (item) =>
-          item.ingredientId === line.ingredientId &&
-          item.unit != null &&
-          areUnitsCompatible(item.unit, line.unit) &&
-          !matchedIds.has(item.id),
-      );
+      candidates.find((item) => item.unit === line.unit) ??
+      candidates.find(
+        (item) => item.unit != null && areUnitsCompatible(item.unit, line.unit),
+      ) ??
+      candidates.find((item) => item.isEdited);
 
     if (compatible) matchedIds.add(compatible.id);
 

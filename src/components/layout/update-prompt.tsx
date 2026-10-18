@@ -1,5 +1,6 @@
 import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { setupServiceWorker } from "@/pwa";
@@ -7,6 +8,8 @@ import { setupServiceWorker } from "@/pwa";
 /**
  * Melding dat er een nieuwe versie klaarstaat. De gebruiker kiest zelf wanneer
  * die wordt geladen; de opgeslagen gegevens blijven ongemoeid.
+ *
+ * Meldt ook eenmalig dat de app offline klaar is, of dat dat is mislukt.
  */
 export function UpdatePrompt() {
   const [reload, setReload] = useState<(() => Promise<void>) | null>(null);
@@ -16,7 +19,14 @@ export function UpdatePrompt() {
     setupServiceWorker({
       onNeedRefresh: (doReload) => setReload(() => doReload),
       onOfflineReady: () => {
-        // Niets te melden: offline werken is hier het uitgangspunt.
+        toast.success("Klaar voor offlinegebruik", {
+          description: "De app opent nu ook zonder internet.",
+        });
+      },
+      onError: (message) => {
+        toast.error("Offlinegebruik is niet gelukt", {
+          description: `${message} Open de app opnieuw met internet.`,
+        });
       },
     });
   }, []);

@@ -7,25 +7,42 @@ import { formatSeconds } from "@/lib/dates";
 export interface RestTimerState {
   totalSeconds: number;
   startedAt: number;
+  /** Tijdstip waarop is gepauzeerd; ontbreekt als de timer loopt. */
+  pausedAt?: number;
 }
 
 /**
  * Rusttimer tussen de sets. Loopt op de wandklok, niet op een teller: als het
  * scherm van de telefoon uit gaat, klopt de tijd bij terugkomen nog steeds.
+ *
+ * Bij hervatten schuift het starttijdstip op met de duur van de pauze, zodat
+ * de gepauzeerde tijd niet alsnog van de rust afgaat.
  */
 export function RestTimer({
   state,
   onClose,
-  onExtend,
+  onChange,
 }: {
   state: RestTimerState;
   onClose: () => void;
-  onExtend: (seconds: number) => void;
+  onChange: (next: RestTimerState) => void;
 }) {
   const [now, setNow] = useState(() => Date.now());
-  /** Tijdstip waarop is gepauzeerd; null als de timer loopt. */
-  const [pausedAt, setPausedAt] = useState<number | null>(null);
+  const pausedAt = state.pausedAt ?? null;
   const paused = pausedAt != null;
+
+  function togglePause() {
+    const at = Date.now();
+    if (pausedAt == null) {
+      onChange({ ...state, pausedAt: at });
+      return;
+    }
+    setNow(at);
+    onChange({
+      totalSeconds: state.totalSeconds,
+      startedAt: state.startedAt + (at - pausedAt),
+    });
+  }
 
   useEffect(() => {
     if (paused) return;
@@ -61,7 +78,13 @@ export function RestTimer({
             </p>
           </div>
 
-          <Button variant="outline" size="sm" onClick={() => onExtend(30)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              onChange({ ...state, totalSeconds: state.totalSeconds + 30 })
+            }
+          >
             <Plus className="size-4" aria-hidden />
             30s
           </Button>
@@ -69,7 +92,7 @@ export function RestTimer({
             variant="outline"
             size="icon"
             aria-label={paused ? "Doorgaan" : "Pauzeren"}
-            onClick={() => setPausedAt(paused ? null : Date.now())}
+            onClick={togglePause}
           >
             {paused ? (
               <Play className="size-4" aria-hidden />

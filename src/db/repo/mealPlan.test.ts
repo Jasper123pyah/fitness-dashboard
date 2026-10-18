@@ -136,11 +136,19 @@ describe("weekmenu", () => {
       slot: "DINNER",
       recipeId: "recipe-groentecurry",
     });
-    await applyTemplateToWeek(templateId, WEEK, { replaceExisting: false });
+    const result = await applyTemplateToWeek(templateId, WEEK, {
+      replaceExisting: false,
+    });
 
-    // Het sjabloon overschrijft hetzelfde slot wél; alleen de week wordt niet gewist.
+    // Een bezet slot blijft staan; alleen lege plekken worden gevuld.
     const plan = await getWeekPlan(WEEK);
-    expect(plan.days[0].meals.DINNER?.recipeId).toBe("recipe-burritobowl");
+    expect(plan.days[0].meals.DINNER?.recipeId).toBe("recipe-groentecurry");
+    expect(result.skipped).toBe(1);
+
+    await clearWeek(WEEK);
+    await applyTemplateToWeek(templateId, WEEK, { replaceExisting: false });
+    const filled = await getWeekPlan(WEEK);
+    expect(filled.days[0].meals.DINNER?.recipeId).toBe("recipe-burritobowl");
   });
 
   it("verwijdert een maaltijd", async () => {

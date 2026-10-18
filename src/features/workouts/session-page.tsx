@@ -273,13 +273,7 @@ export function SessionPage() {
         <RestTimer
           state={timer}
           onClose={() => setTimer(null)}
-          onExtend={(seconds) =>
-            setTimer((current) =>
-              current
-                ? { ...current, totalSeconds: current.totalSeconds + seconds }
-                : current,
-            )
-          }
+          onChange={setTimer}
         />
       ) : null}
 

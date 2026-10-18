@@ -242,11 +242,17 @@ export function TemplatesPage() {
             <Button
               onClick={async () => {
                 if (!applyFor) return;
-                await applyTemplateToWeek(applyFor, targetWeek, {
-                  replaceExisting,
-                });
+                const result = await applyTemplateToWeek(
+                  applyFor,
+                  targetWeek,
+                  { replaceExisting },
+                );
                 setApplyFor(null);
-                toast.success("Sjabloon toegepast");
+                toast.success(
+                  result.skipped > 0
+                    ? `Sjabloon toegepast: ${result.filled} ingevuld, ${result.skipped} bestaande maaltijd${result.skipped === 1 ? "" : "en"} behouden`
+                    : "Sjabloon toegepast",
+                );
               }}
             >
               Toepassen

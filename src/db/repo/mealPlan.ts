@@ -319,11 +319,21 @@ export async function saveWeekAsTemplate(
   return templateId;
 }
 
+export interface ApplyTemplateResult {
+  filled: number;
+  /** Slots die al bezet waren en zijn blijven staan. */
+  skipped: number;
+}
+
+/**
+ * Zet een sjabloon op een week. Zonder `replaceExisting` worden alleen de lege
+ * slots gevuld; wat er al gepland staat blijft ongemoeid.
+ */
 export async function applyTemplateToWeek(
   templateId: string,
   weekStart: DateKey,
   options: { replaceExisting?: boolean } = {},
-): Promise<void> {
+): Promise<ApplyTemplateResult> {
   const items = await db.mealPlanTemplateItems
     .where("templateId")
     .equals(templateId)
@@ -332,15 +342,30 @@ export async function applyTemplateToWeek(
 
   if (options.replaceExisting) await clearWeek(monday);
 
+  const plan = await getOrCreateMealPlan(monday);
+  const occupied = new Set(
+    (await db.plannedMeals.where("mealPlanId").equals(plan.id).toArray()).map(
+      (meal) => `${meal.date}|${meal.slot}`,
+    ),
+  );
+
+  const result: ApplyTemplateResult = { filled: 0, skipped: 0 };
   for (const item of items) {
+    const date = addDaysToKey(monday, item.weekday - 1);
+    if (occupied.has(`${date}|${item.slot}`)) {
+      result.skipped += 1;
+      continue;
+    }
     await setPlannedMeal({
-      date: addDaysToKey(monday, item.weekday - 1),
+      date,
       slot: item.slot,
       recipeId: item.recipeId,
       servings: item.servings,
       memberIds: item.memberIds,
     });
+    result.filled += 1;
   }
+  return result;
 }
 
 export async function updateTemplate(

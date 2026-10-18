@@ -98,6 +98,7 @@ describe("back-up maken en terugzetten", () => {
     const backup = await exportBackup();
     const stripped = {
       ...backup,
+      counts: { ...backup.counts, exercises: 0, recipes: 0, meta: 0 },
       data: { ...backup.data, exercises: [], recipes: [], meta: [] },
     };
 
@@ -106,5 +107,59 @@ describe("back-up maken en terugzetten", () => {
     // Het seeden draait opnieuw, dus de standaardoefeningen staan er weer.
     expect(await db.exercises.count()).toBeGreaterThan(30);
     expect(await db.recipes.count()).toBeGreaterThan(20);
+  });
+
+  it("wist niets bij een onvolledige back-up", async () => {
+    await saveWeightEntry({ date: "2026-10-12", weightKg: 75.4 });
+    const exercisesBefore = await db.exercises.count();
+
+    await expect(
+      importBackup(
+        JSON.stringify({ format: "trainlog-backup", version: 1, data: {} }),
+      ),
+    ).rejects.toThrow(/onvolledig/);
+
+    const backup = await exportBackup();
+    const { sessions: _sessions, ...withoutSessions } = backup.data;
+    await expect(
+      importBackup(JSON.stringify({ ...backup, data: withoutSessions })),
+    ).rejects.toThrow(/sessions ontbreekt/);
+
+    await expect(
+      importBackup(
+        JSON.stringify({
+          ...backup,
+          data: { ...backup.data, weightEntries: [] },
+        }),
+      ),
+    ).rejects.toThrow(/0 van de 1 rijen/);
+
+    expect(await db.weightEntries.count()).toBe(1);
+    expect(await db.exercises.count()).toBe(exercisesBefore);
+  });
+
+  it("weigert rijen zonder sleutel of met kapotte verwijzingen", async () => {
+    const backup = await exportBackup();
+    const { counts: _counts, ...withoutCounts } = backup;
+
+    await expect(
+      importBackup(
+        JSON.stringify({
+          ...withoutCounts,
+          data: { ...backup.data, weightEntries: [{ weightKg: 70 }] },
+        }),
+      ),
+    ).rejects.toThrow(/ongeldige rij in weightEntries/);
+
+    await expect(
+      importBackup(
+        JSON.stringify({
+          ...withoutCounts,
+          data: { ...backup.data, programs: [] },
+        }),
+      ),
+    ).rejects.toThrow(/workoutDays .* programs/);
+
+    expect(await db.programs.count()).toBeGreaterThan(0);
   });
 });

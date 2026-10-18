@@ -1,7 +1,10 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import {
+  AlertTriangle,
+  CheckCircle2,
   Download,
   Info,
+  Loader2,
   Moon,
   Plus,
   RotateCcw,
@@ -11,7 +14,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { BackupSummary } from "./backup-summary";
@@ -53,7 +56,13 @@ import { DIETARY_PREFERENCES, GOALS } from "@/db/types";
 import { useHouseholdMembers, useSettings } from "@/hooks/use-settings";
 import { WEEKDAY_NAMES } from "@/lib/dates";
 import { DIETARY_PREFERENCE_LABELS, GOAL_LABELS } from "@/lib/labels";
-import { isStandalone } from "@/pwa";
+import { usePwaStatus } from "@/hooks/use-pwa-status";
+import {
+  isStandalone,
+  requestPersistentStorage,
+  type OfflineStatus,
+  type StorageStatus,
+} from "@/pwa";
 import { cn } from "@/lib/utils";
 
 export function SettingsPage() {
@@ -557,8 +566,7 @@ export function SettingsPage() {
         </h2>
         {isStandalone() ? (
           <p className="text-xs text-muted-foreground">
-            De app draait als geïnstalleerde app. Je kunt hem ook zonder
-            internet openen.
+            De app draait als geïnstalleerde app.
           </p>
         ) : (
           <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
@@ -566,12 +574,12 @@ export function SettingsPage() {
             <li>Tik op het deelicoon onderin.</li>
             <li>Kies "Zet op beginscherm".</li>
             <li>
-              Open de app vanaf je beginscherm. Daarna werkt alles zonder
-              internet. Op Android doe je hetzelfde via het menu van Chrome met
-              "App installeren".
+              Open de app vanaf je beginscherm. Op Android doe je hetzelfde via
+              het menu van Chrome met "App installeren".
             </li>
           </ol>
         )}
+        <DeviceStatus />
       </section>
 
       <section className="space-y-3 rounded-xl border border-destructive/30 bg-card p-4">
@@ -611,6 +619,107 @@ export function SettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+const OFFLINE_TEXT: Record<
+  OfflineStatus["state"],
+  { tone: StatusTone; text: string }
+> = {
+  ready: {
+    tone: "ok",
+    text: "Offline klaar: de app staat op dit toestel en opent ook zonder internet.",
+  },
+  installing: {
+    tone: "busy",
+    text: "Offline-bestanden worden nog opgeslagen. Houd de app even open met internet.",
+  },
+  error: { tone: "warn", text: "Offlinegebruik is niet gelukt." },
+  unsupported: {
+    tone: "warn",
+    text: "Deze browser ondersteunt geen offlinegebruik.",
+  },
+  disabled: {
+    tone: "warn",
+    text: "Offlinegebruik staat uit in de ontwikkelversie.",
+  },
+};
+
+const STORAGE_TEXT: Record<StorageStatus, { tone: StatusTone; text: string }> =
+  {
+    persisted: {
+      tone: "ok",
+      text: "Beschermde opslag: de browser ruimt je gegevens niet zomaar op.",
+    },
+    "not-persisted": {
+      tone: "warn",
+      text: "Beschermde opslag is niet toegekend. De browser mag je gegevens opruimen als er ruimte nodig is; maak regelmatig een back-up.",
+    },
+    unsupported: {
+      tone: "warn",
+      text: "Deze browser kan de opslag niet beschermen. Maak regelmatig een back-up.",
+    },
+    checking: { tone: "busy", text: "Opslagstatus controleren…" },
+  };
+
+type StatusTone = "ok" | "busy" | "warn";
+
+function StatusLine({
+  tone,
+  children,
+}: {
+  tone: StatusTone;
+  children: ReactNode;
+}) {
+  const Icon =
+    tone === "ok" ? CheckCircle2 : tone === "busy" ? Loader2 : AlertTriangle;
+  return (
+    <p className="flex items-start gap-2 text-xs text-muted-foreground">
+      <Icon
+        className={cn(
+          "mt-0.5 size-4 shrink-0",
+          tone === "ok" && "text-primary",
+          tone === "busy" && "animate-spin",
+          tone === "warn" && "text-destructive",
+        )}
+        aria-hidden
+      />
+      <span>{children}</span>
+    </p>
+  );
+}
+
+/** Toont wat de browser werkelijk heeft gedaan, niet wat de app verwacht. */
+function DeviceStatus() {
+  const { offline, storage } = usePwaStatus();
+  const offlineText = OFFLINE_TEXT[offline.state];
+  const storageText = STORAGE_TEXT[storage];
+
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <StatusLine tone={offlineText.tone}>
+        {offlineText.text}
+        {offline.state === "error" ? ` ${offline.message}` : null}
+      </StatusLine>
+      <StatusLine tone={storageText.tone}>{storageText.text}</StatusLine>
+      {storage === "not-persisted" ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            const result = await requestPersistentStorage();
+            if (result === "persisted") toast.success("Opslag is nu beschermd");
+            else
+              toast.info("De browser houdt de opslag nog onbeschermd", {
+                description:
+                  "Browsers beslissen dit zelf, bijvoorbeeld op basis van hoe vaak je de app gebruikt. Op iPhone helpt het om de app vanaf het beginscherm te openen.",
+              });
+          }}
+        >
+          Opnieuw vragen
+        </Button>
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,12 @@
 import { db, META_KEYS, setMeta } from "./db";
 import { nowIso } from "./ids";
 import { seedDatabase } from "./seed";
+import {
+  SEED_EXERCISES,
+  SEED_INGREDIENTS,
+  SEED_RECIPES,
+  SEED_VERSION,
+} from "./seed-data";
 import type { ProgressPhoto } from "./types";
 
 export const BACKUP_FORMAT = "trainlog-backup";
@@ -189,6 +195,160 @@ export async function downloadBackup(): Promise<string> {
 
 export class BackupError extends Error {}
 
+export const BACKUP_TABLES = [
+  "settings",
+  "householdMembers",
+  "exercises",
+  "programs",
+  "workoutDays",
+  "workoutDayExercises",
+  "sessions",
+  "exerciseLogs",
+  "setLogs",
+  "ingredients",
+  "recipes",
+  "recipeIngredients",
+  "mealPlans",
+  "plannedMeals",
+  "mealPlanTemplates",
+  "mealPlanTemplateItems",
+  "groceryLists",
+  "groceryItems",
+  "weightEntries",
+  "bodyMeasurements",
+  "progressPhotos",
+  "meta",
+] as const satisfies readonly (keyof BackupFile["data"])[];
+
+type BackupTable = (typeof BACKUP_TABLES)[number];
+
+/**
+ * Verwijzingen die de app zelf altijd heel houdt (bij verwijderen gaan de
+ * afhankelijke rijen mee). Een back-up waarin zo'n verwijzing nergens heen
+ * wijst, is beschadigd of met de hand aangepast.
+ */
+const REFERENCES: {
+  table: BackupTable;
+  field: string;
+  target: BackupTable;
+  optional?: boolean;
+}[] = [
+  { table: "workoutDays", field: "programId", target: "programs" },
+  { table: "workoutDayExercises", field: "workoutDayId", target: "workoutDays" },
+  { table: "workoutDayExercises", field: "exerciseId", target: "exercises" },
+  { table: "exerciseLogs", field: "sessionId", target: "sessions" },
+  { table: "exerciseLogs", field: "exerciseId", target: "exercises" },
+  { table: "setLogs", field: "exerciseLogId", target: "exerciseLogs" },
+  { table: "recipeIngredients", field: "recipeId", target: "recipes" },
+  { table: "recipeIngredients", field: "ingredientId", target: "ingredients" },
+  { table: "plannedMeals", field: "mealPlanId", target: "mealPlans" },
+  {
+    table: "plannedMeals",
+    field: "recipeId",
+    target: "recipes",
+    optional: true,
+  },
+  {
+    table: "mealPlanTemplateItems",
+    field: "templateId",
+    target: "mealPlanTemplates",
+  },
+  { table: "mealPlanTemplateItems", field: "recipeId", target: "recipes" },
+  { table: "groceryLists", field: "mealPlanId", target: "mealPlans" },
+  { table: "groceryItems", field: "groceryListId", target: "groceryLists" },
+];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Controleert de hele back-up voordat er iets wordt gewist: elke tabel moet
+ * aanwezig zijn, elke rij moet een sleutel hebben en verwijzingen moeten
+ * kloppen. Importeren vervangt alles, dus een half bestand zou anders stil alle
+ * voortgang weggooien.
+ */
+function validateBackupData(backup: BackupFile): void {
+  const data = backup.data as unknown as Record<string, unknown>;
+
+  const missing = BACKUP_TABLES.filter((table) => !Array.isArray(data[table]));
+  if (missing.length > 0) {
+    throw new BackupError(
+      `De back-up is onvolledig: ${missing.join(", ")} ontbreekt. Er is niets gewijzigd.`,
+    );
+  }
+
+  if (isRecord(backup.counts)) {
+    for (const table of BACKUP_TABLES) {
+      const expected = backup.counts[table];
+      const actual = (data[table] as unknown[]).length;
+      if (typeof expected === "number" && expected !== actual) {
+        throw new BackupError(
+          `De back-up is onvolledig: ${table} bevat ${actual} van de ${expected} rijen. Er is niets gewijzigd.`,
+        );
+      }
+    }
+  }
+
+  const ids = new Map<BackupTable, Set<string>>();
+  for (const table of BACKUP_TABLES) {
+    const keyField = table === "meta" ? "key" : "id";
+    const keys = new Set<string>();
+    for (const row of data[table] as unknown[]) {
+      const key = isRecord(row) ? row[keyField] : undefined;
+      if (typeof key !== "string" || key === "") {
+        throw new BackupError(
+          `De back-up bevat een ongeldige rij in ${table}. Er is niets gewijzigd.`,
+        );
+      }
+      if (
+        table === "progressPhotos" &&
+        (typeof (row as Record<string, unknown>).blobDataUrl !== "string" ||
+          !((row as Record<string, unknown>).blobDataUrl as string).startsWith(
+            "data:",
+          ))
+      ) {
+        throw new BackupError(
+          `De back-up bevat een foto zonder beeld (${key}). Er is niets gewijzigd.`,
+        );
+      }
+      keys.add(key);
+    }
+    ids.set(table, keys);
+  }
+
+  if (ids.get("settings")!.size === 0) {
+    throw new BackupError(
+      "De back-up bevat geen instellingen. Er is niets gewijzigd.",
+    );
+  }
+
+  // Na het terugzetten vult seedDatabase() ontbrekende standaardoefeningen,
+  // -ingrediënten en -recepten aan, maar alleen als de back-up van een oudere
+  // seedversie is. Alleen dan mogen verwijzingen daarop leunen.
+  const seedVersion = (data.meta as Record<string, unknown>[]).find(
+    (row) => row.key === META_KEYS.seedVersion,
+  )?.value;
+  if (typeof seedVersion !== "number" || seedVersion < SEED_VERSION) {
+    for (const item of SEED_EXERCISES) ids.get("exercises")!.add(item.id);
+    for (const item of SEED_INGREDIENTS) ids.get("ingredients")!.add(item.id);
+    for (const item of SEED_RECIPES) ids.get("recipes")!.add(item.id);
+  }
+
+  for (const { table, field, target, optional } of REFERENCES) {
+    const known = ids.get(target)!;
+    for (const row of data[table] as Record<string, unknown>[]) {
+      const value = row[field];
+      if (optional && value == null) continue;
+      if (typeof value !== "string" || !known.has(value)) {
+        throw new BackupError(
+          `De back-up is beschadigd: ${table} ${String(row.id)} verwijst naar een onbekend item in ${target}. Er is niets gewijzigd.`,
+        );
+      }
+    }
+  }
+}
+
 export function parseBackup(raw: string): BackupFile {
   let parsed: unknown;
   try {
@@ -214,6 +374,7 @@ export function parseBackup(raw: string): BackupFile {
   if (typeof backup.data !== "object" || backup.data === null) {
     throw new BackupError("De back-up bevat geen gegevens.");
   }
+  validateBackupData(backup);
   return backup;
 }
 
@@ -231,7 +392,7 @@ export async function importBackup(raw: string): Promise<ImportResult> {
   const data = backup.data;
 
   const photos = await Promise.all(
-    (data.progressPhotos ?? []).map(async (photo) => {
+    data.progressPhotos.map(async (photo) => {
       const { blobDataUrl, ...rest } = photo;
       return { ...rest, blob: dataUrlToBlob(blobDataUrl) };
     }),
@@ -321,19 +482,16 @@ export async function importBackup(raw: string): Promise<ImportResult> {
 
   return {
     restored: Object.fromEntries(
-      Object.entries(data).map(([key, value]) => [
-        key,
-        (value as unknown[] | undefined)?.length ?? 0,
-      ]),
+      BACKUP_TABLES.map((table) => [table, data[table].length]),
     ),
   };
 }
 
-// Dexie's bulkPut is per tabel getypeerd; bij het terugzetten van een back-up is
-// de inhoud per definitie onbekend tot het is ingelezen.
+// Dexie's bulkPut is per tabel getypeerd; parseBackup() heeft de rijen al
+// gecontroleerd, maar hun precieze type is hier niet bekend.
 function bulkPut(
   table: { bulkPut: (rows: never[]) => Promise<unknown> },
-  rows: unknown[] | undefined,
+  rows: unknown[],
 ) {
-  return table.bulkPut((rows ?? []) as never[]);
+  return table.bulkPut(rows as never[]);
 }

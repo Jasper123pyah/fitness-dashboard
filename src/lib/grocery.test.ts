@@ -309,6 +309,14 @@ describe("opnieuw genereren van de lijst", () => {
     expect(result.upsert).toHaveLength(0);
   });
 
+  it("laat een aanpassing naar een andere eenheid staan", () => {
+    const edited = existingItem({ quantity: 3, unit: "PIECE", isEdited: true });
+    const result = mergeGroceryItems([edited], generated);
+    expect(result.keep).toContainEqual(edited);
+    expect(result.upsert).toHaveLength(0);
+    expect(result.removeIds).toHaveLength(0);
+  });
+
   it("verwijdert regels die niet meer in het weekmenu staan", () => {
     const stale = existingItem({
       id: "item-stale",
