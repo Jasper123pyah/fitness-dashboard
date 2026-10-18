@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowLeft, CheckCircle2, Plus, Timer } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Plus, Timer, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ import {
   addExerciseToSession,
   addSet,
   completeSession,
+  deleteSession,
   getAdviceForSession,
   getPreviousPerformance,
   getSessionDetail,
@@ -76,6 +77,8 @@ export function SessionPage() {
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [elapsed, setElapsed] = useState("0:00");
+  /** "empty": afronden zonder sets; "manual": via de verwijderknop. */
+  const [deleteFor, setDeleteFor] = useState<"empty" | "manual" | null>(null);
 
   // Looptijd van de training; begint bij de starttijd uit de database, dus ook
   // na het sluiten van de app klopt hij nog.
@@ -129,15 +132,22 @@ export function SessionPage() {
 
   async function handleComplete() {
     if (totals.sets === 0) {
-      toast.error("Nog geen set afgerond", {
-        description: "Rond minstens één set af, of verwijder de training.",
-      });
+      // Zonder afgeronde sets valt er niets op te slaan; bied stoppen aan.
+      setDeleteFor("empty");
       return;
     }
     await completeSession(session!.id);
     toast.success("Training afgerond", {
       description: `${totals.sets} sets · ${totals.volume} kg totaal`,
     });
+    navigate("/training");
+  }
+
+  async function handleDelete() {
+    setTimer(null);
+    await deleteSession(session!.id);
+    setDeleteFor(null);
+    toast.success("Training verwijderd");
     navigate("/training");
   }
 
@@ -154,17 +164,28 @@ export function SessionPage() {
           <ArrowLeft className="size-4" aria-hidden />
           Training
         </Button>
-        {session.status === "COMPLETED" ? (
-          <span className="flex items-center gap-1 text-xs font-medium text-success">
-            <CheckCircle2 className="size-4" aria-hidden />
-            Afgerond
-          </span>
-        ) : (
-          <Button size="sm" onClick={() => void handleComplete()}>
-            <CheckCircle2 className="size-4" aria-hidden />
-            Afronden
+        <div className="flex items-center gap-1">
+          {session.status === "COMPLETED" ? (
+            <span className="mr-1 flex items-center gap-1 text-xs font-medium text-success">
+              <CheckCircle2 className="size-4" aria-hidden />
+              Afgerond
+            </span>
+          ) : (
+            <Button size="sm" onClick={() => void handleComplete()}>
+              <CheckCircle2 className="size-4" aria-hidden />
+              Afronden
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Training verwijderen"
+            className="text-muted-foreground"
+            onClick={() => setDeleteFor("manual")}
+          >
+            <Trash2 className="size-4" aria-hidden />
           </Button>
-        )}
+        </div>
       </div>
 
       <header className="rounded-xl border bg-card p-4">
@@ -310,6 +331,43 @@ export function SessionPage() {
           }
         }}
       />
+
+      <Dialog
+        open={deleteFor != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteFor(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {deleteFor === "empty"
+                ? "Nog geen set afgerond"
+                : "Training verwijderen?"}
+            </DialogTitle>
+            <DialogDescription>
+              {deleteFor === "empty"
+                ? "Er is niets om op te slaan. Wil je deze training stoppen en verwijderen?"
+                : totals.sets > 0
+                  ? `De ${totals.sets} afgeronde sets verdwijnen uit je geschiedenis. Dit kan niet ongedaan worden gemaakt.`
+                  : "Deze training wordt verwijderd."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose
+              render={
+                <Button variant="ghost">
+                  {deleteFor === "empty" ? "Doortrainen" : "Annuleren"}
+                </Button>
+              }
+            />
+            <Button variant="destructive" onClick={() => void handleDelete()}>
+              <Trash2 className="size-4" aria-hidden />
+              {deleteFor === "empty" ? "Stoppen en verwijderen" : "Verwijderen"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={notesOpen} onOpenChange={setNotesOpen}>
         <DialogContent className="sm:max-w-md">
