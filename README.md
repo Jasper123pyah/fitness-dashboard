@@ -40,10 +40,10 @@ Installeren en offline werken vraagt een beveiligde verbinding: `https://`, of
 netwerk werkt de app wel, maar registreert de service worker niet — zet hem
 daarvoor dus eerst online (zie hieronder).
 
-1. Zet de app online, bijvoorbeeld op GitHub Pages.
-2. Open de pagina in **Safari** op je iPhone.
-3. Tik op het deelicoon en kies **Zet op beginscherm**.
-4. Open de app vanaf je beginscherm. Vanaf dat moment werkt alles zonder
+1. Open <https://jasper123pyah.github.io/fitness-dashboard/> in **Safari** op
+   je iPhone.
+2. Tik op het deelicoon en kies **Zet op beginscherm**.
+3. Open de app vanaf je beginscherm. Vanaf dat moment werkt alles zonder
    internet: de app staat in de cache en je gegevens staan in de database op je
    toestel.
 
@@ -51,23 +51,38 @@ Op Android doe je hetzelfde via het menu van Chrome, met **App installeren**.
 
 ## Online zetten
 
-De build is een map met statische bestanden. Die kan op elke host staan.
+De app staat op <https://jasper123pyah.github.io/fitness-dashboard/>.
 
-**GitHub Pages.** Er staat een workflow klaar in
-`.github/workflows/deploy.yml`. Zet in de repository-instellingen *Pages* op
-*GitHub Actions* en push naar `main`. De workflow bouwt met het juiste
-basispad.
-
-**Zelf bouwen voor een submap:**
+Opnieuw publiceren na een wijziging:
 
 ```bash
-BASE_PATH=/naam-van-je-repo/ npm run build
+npm run deploy
 ```
 
-Zonder `BASE_PATH` worden relatieve paden gebruikt, wat op de meeste hosts
-(Netlify, Vercel, een eigen map) direct werkt. De app gebruikt hash-routering
-(`/#/training`), dus er zijn geen serverregels nodig om diep linken te laten
-werken.
+Dat bouwt de app met het juiste basispad en zet het resultaat op de branch
+`gh-pages`, waar GitHub Pages hem vandaan serveert. De broncode staat op
+`main`; op `gh-pages` staat alleen de build.
+
+Wil je dat het automatisch gebeurt bij elke push naar `main`, gebruik dan de
+workflow in `.github/workflows/deploy.yml`. Die kan pas gepusht worden als je
+token de scope `workflow` heeft:
+
+```bash
+gh auth refresh --user Jasper123pyah -s workflow
+```
+
+Zet daarna in de repository-instellingen *Pages* op *GitHub Actions*.
+
+**Een andere host.** De build is een map met statische bestanden, dus Netlify,
+Cloudflare Pages of een eigen webruimte werken net zo goed:
+
+```bash
+npm run build          # relatieve paden, werkt in elke map
+BASE_PATH=/submap/ npm run build
+```
+
+De app gebruikt hash-routering (`/#/training`), dus er zijn geen serverregels
+nodig om diep linken te laten werken.
 
 ## Waar je gegevens staan
 

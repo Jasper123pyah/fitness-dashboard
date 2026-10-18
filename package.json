@@ -10,7 +10,8 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run lint && npm run typecheck && npm run test"
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "deploy": "node scripts/deploy-pages.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
