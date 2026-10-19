@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { fileURLToPath, URL } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
@@ -10,8 +11,21 @@ import { VitePWA } from "vite-plugin-pwa";
  * host (GitHub Pages, Netlify, een USB-stick) kan staan. Relatieve paden zorgen
  * dat het ook werkt onder een submap zoals /fitness-dashboard/.
  */
+function buildId(): string {
+  let commit = "onbekend";
+  try {
+    commit = execSync("git rev-parse --short HEAD").toString().trim();
+  } catch {
+    // Geen git beschikbaar; alleen de bouwtijd dan.
+  }
+  return `${commit} (${new Date().toISOString().slice(0, 16)})`;
+}
+
 export default defineConfig({
   base: process.env.BASE_PATH ?? "./",
+  define: {
+    __APP_BUILD__: JSON.stringify(buildId()),
+  },
   plugins: [
     react(),
     tailwindcss(),

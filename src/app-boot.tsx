@@ -38,8 +38,12 @@ export function AppBoot({ children }: { children: ReactNode }) {
         }
 
         void requestPersistentStorage();
+        // Laat het vangnet in index.html weten dat de app is opgestart.
+        window.__trainlogMounted = true;
         if (!cancelled) setState({ status: "ready" });
       } catch (error) {
+        // Er staat een eigen foutscherm in beeld; het vangnet hoeft niet.
+        window.__trainlogMounted = true;
         if (cancelled) return;
         setState({
           status: "error",

@@ -11,9 +11,16 @@
  * daarvoor heeft je token de scope `workflow` nodig.
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, cpSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 function run(command, args, options = {}) {
   return execFileSync(command, args, { stdio: "inherit", ...options });
@@ -37,6 +44,12 @@ try {
   // Zonder dit bestand negeert GitHub Pages mappen die met een _ beginnen.
   writeFileSync(join(staging, ".nojekyll"), "");
 
+  // Bestanden van eerdere builds blijven staan. Een geïnstalleerde app draait
+  // tot de gebruiker op "Bijwerken" tikt nog op de oude versie; als die een
+  // bestand mist in zijn cache, moet het nog van de server te halen zijn.
+  const carried = carryOverOldAssets(staging);
+  if (carried > 0) console.log(`${carried} bestanden van eerdere builds behouden`);
+
   const git = (...args) => run("git", ["-C", staging, ...args]);
   git("init", "-q", "-b", "gh-pages");
   git("add", "-A");
@@ -55,4 +68,24 @@ try {
   console.log(`Gepubliceerd: https://${repoPath.split("/")[0].toLowerCase()}.github.io${basePath}`);
 } finally {
   rmSync(staging, { recursive: true, force: true });
+}
+
+function carryOverOldAssets(target) {
+  try {
+    execFileSync("git", ["fetch", "-q", remote, "gh-pages"], { stdio: "ignore" });
+  } catch {
+    return 0; // Eerste publicatie: er is nog niets om te bewaren.
+  }
+  const files = capture("git", ["ls-tree", "-r", "--name-only", "FETCH_HEAD", "assets/"])
+    .split("\n")
+    .filter(Boolean);
+  let count = 0;
+  for (const file of files) {
+    const destination = join(target, file);
+    if (existsSync(destination)) continue;
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, execFileSync("git", ["show", `FETCH_HEAD:${file}`]));
+    count += 1;
+  }
+  return count;
 }

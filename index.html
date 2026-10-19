@@ -21,6 +21,149 @@
   </head>
   <body class="min-h-full">
     <div id="root"></div>
+    <script>
+      /*
+       * Vangnet dat los van de app-bundle werkt: als de app niet start of
+       * tijdens het tekenen crasht, staat hier de echte foutmelding in plaats
+       * van een leeg scherm. Bewust ES5 zonder afhankelijkheden, zodat het ook
+       * draait als de bundle zelf in deze browser niet laadt.
+       *
+       * De herstelknoppen raken alleen de cache van de service worker; de
+       * gegevens in IndexedDB blijven altijd staan.
+       */
+      (function () {
+        var errors = [];
+        var shown = false;
+
+        function describe(value) {
+          if (!value) return "Onbekende fout";
+          if (value.stack && value.message) {
+            return value.name + ": " + value.message + "\n" + value.stack;
+          }
+          if (value.message) return String(value.message);
+          return String(value);
+        }
+
+        window.addEventListener(
+          "error",
+          function (event) {
+            var target = event.target;
+            if (target && target !== window && (target.src || target.href)) {
+              errors.push("Laden mislukt: " + (target.src || target.href));
+            } else {
+              errors.push(
+                describe(event.error) +
+                  (event.filename
+                    ? "\n(" + event.filename + ":" + event.lineno + ":" + event.colno + ")"
+                    : ""),
+              );
+            }
+          },
+          true,
+        );
+        window.addEventListener("unhandledrejection", function (event) {
+          errors.push("Niet afgehandeld: " + describe(event.reason));
+        });
+
+        function escapeHtml(text) {
+          return String(text).replace(/[&<>"]/g, function (c) {
+            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+          });
+        }
+
+        function resetCache() {
+          var jobs = [];
+          if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+            jobs.push(
+              navigator.serviceWorker.getRegistrations().then(function (regs) {
+                return Promise.all(
+                  regs.map(function (reg) {
+                    return reg.unregister();
+                  }),
+                );
+              }),
+            );
+          }
+          if (window.caches && caches.keys) {
+            jobs.push(
+              caches.keys().then(function (keys) {
+                return Promise.all(
+                  keys.map(function (key) {
+                    return caches.delete(key);
+                  }),
+                );
+              }),
+            );
+          }
+          Promise.all(jobs).then(
+            function () {
+              location.reload();
+            },
+            function () {
+              location.reload();
+            },
+          );
+        }
+
+        function show(reason) {
+          if (shown) return;
+          shown = true;
+          if (reason) errors.unshift(reason);
+          var details =
+            "Versie: " + (window.__TRAINLOG_BUILD__ || "onbekend") +
+            "\nBrowser: " + navigator.userAgent +
+            "\nAdres: " + location.href +
+            "\nService worker actief: " +
+            Boolean(navigator.serviceWorker && navigator.serviceWorker.controller) +
+            "\n\n" +
+            (errors.length ? errors.join("\n\n") : "Geen foutmelding ontvangen.");
+
+          var box = document.createElement("div");
+          box.setAttribute("role", "alert");
+          box.style.cssText =
+            "position:fixed;inset:0;z-index:2147483647;overflow:auto;" +
+            "background:#111317;color:#f3f4f6;padding:max(24px,env(safe-area-inset-top)) 20px 24px;" +
+            "font:15px/1.5 -apple-system,system-ui,sans-serif;";
+          box.innerHTML =
+            '<div style="max-width:560px;margin:0 auto">' +
+            '<h1 style="font-size:20px;margin:0 0 8px">Trainlog kon niet starten</h1>' +
+            '<p style="margin:0 0 16px;color:#9ca3af">Je gegevens staan nog op dit toestel; ' +
+            "ze worden door de knoppen hieronder niet gewist. Maak een schermafbeelding van " +
+            "de foutmelding als het probleem blijft.</p>" +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">' +
+            '<button data-action="reload" style="padding:10px 14px;border-radius:10px;border:0;background:#22c55e;color:#06210f;font-weight:600">Opnieuw laden</button>' +
+            '<button data-action="reset" style="padding:10px 14px;border-radius:10px;border:1px solid #374151;background:transparent;color:inherit">Offline-cache vernieuwen</button>' +
+            "</div>" +
+            '<pre style="white-space:pre-wrap;word-break:break-word;font:12px/1.45 ui-monospace,Menlo,monospace;background:#1f2329;padding:12px;border-radius:10px;margin:0;user-select:text;-webkit-user-select:text">' +
+            escapeHtml(details) +
+            "</pre></div>";
+          box.addEventListener("click", function (event) {
+            var action = event.target && event.target.getAttribute("data-action");
+            if (action === "reload") location.reload();
+            if (action === "reset") resetCache();
+          });
+          document.body.appendChild(box);
+        }
+
+        // De app roept dit aan bij een fatale fout; het scherm hangt dan buiten
+        // React, zodat een gecrashte boom het niet kan meenemen.
+        window.__trainlogFatal = function (error) {
+          show(describe(error));
+        };
+
+        // Komt de app na een tijd nog steeds niet in beeld, dan is er iets mis
+        // dat geen fout gooit (bijvoorbeeld een database die niet reageert).
+        setTimeout(function () {
+          if (!window.__trainlogMounted) {
+            show(
+              errors.length
+                ? ""
+                : "De app is na 15 seconden nog niet gestart. Mogelijk reageert de lokale database niet.",
+            );
+          }
+        }, 15000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
