@@ -1,7 +1,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 
 import { db } from "@/db/db";
-import { formatLongDate, toDateKey } from "@/lib/dates";
+import { formatLongDate, todayKey } from "@/lib/dates";
 
 /** Laat zien hoeveel er in de app staat en wanneer de laatste back-up was. */
 export function BackupSummary({
@@ -36,7 +36,7 @@ export function BackupSummary({
       ))}
       <div className="col-span-4 border-t pt-2 text-xs text-muted-foreground">
         {lastBackupAt
-          ? `Laatste back-up: ${formatLongDate(toDateKey(new Date(lastBackupAt)))}`
+          ? `Laatste back-up: ${formatLongDate(todayKey(new Date(lastBackupAt)))}`
           : "Nog geen back-up gemaakt"}
       </div>
     </dl>

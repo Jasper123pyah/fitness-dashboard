@@ -100,9 +100,9 @@ export async function getActiveSession(): Promise<WorkoutSession | undefined> {
     .equals("IN_PROGRESS")
     .reverse()
     .sortBy("startedAt");
-  const latest = open[0];
-  if (latest) await setMeta(META_KEYS.activeSessionId, latest.id);
-  return latest;
+  // Niet terugschrijven naar meta: dit draait binnen useLiveQuery, waar Dexie
+  // schrijven verbiedt.
+  return open[0];
 }
 
 /**

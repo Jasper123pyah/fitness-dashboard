@@ -21,7 +21,8 @@ export interface PlannedMealWithRecipe extends PlannedMeal {
 }
 
 export interface WeekPlan {
-  plan: MealPlan;
+  /** null zolang er voor deze week nog niets is opgeslagen. */
+  plan: MealPlan | null;
   weekStart: DateKey;
   days: {
     date: DateKey;
@@ -58,12 +59,21 @@ export async function getOrCreateMealPlan(
   return plan;
 }
 
+/**
+ * Leest het weekmenu. Schrijft niets: dit draait binnen useLiveQuery, waar
+ * Dexie schrijven verbiedt. Een week zonder plan geeft een lege week terug;
+ * het plan wordt pas aangemaakt bij de eerste maaltijd (setPlannedMeal).
+ *
+ * Eerder maakte deze functie het plan aan. Op elke maandag (nieuwe week, nog
+ * geen plan) crashte het dashboard daardoor met een ReadOnlyError.
+ */
 export async function getWeekPlan(weekStartInput: DateKey): Promise<WeekPlan> {
-  const plan = await getOrCreateMealPlan(weekStartInput);
-  const meals = await db.plannedMeals
-    .where("mealPlanId")
-    .equals(plan.id)
-    .toArray();
+  const weekStart = startOfWeekKey(weekStartInput);
+  const plan =
+    (await db.mealPlans.where("weekStart").equals(weekStart).first()) ?? null;
+  const meals = plan
+    ? await db.plannedMeals.where("mealPlanId").equals(plan.id).toArray()
+    : [];
   const recipes = await db.recipes.bulkGet([
     ...new Set(
       meals
@@ -79,8 +89,8 @@ export async function getWeekPlan(weekStartInput: DateKey): Promise<WeekPlan> {
 
   return {
     plan,
-    weekStart: plan.weekStart,
-    days: weekKeys(plan.weekStart).map((date) => {
+    weekStart,
+    days: weekKeys(weekStart).map((date) => {
       const slots: Record<MealCategory, PlannedMealWithRecipe | null> = {
         ...EMPTY_SLOTS,
       };

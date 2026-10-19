@@ -29,14 +29,15 @@ import {
 } from "@/db/repo/workouts";
 import type { MealCategory } from "@/db/types";
 import { useSettings } from "@/hooks/use-settings";
-import { formatRelativeDay, formatShortDate, todayKey } from "@/lib/dates";
+import { useToday } from "@/hooks/use-today";
+import { formatRelativeDay, formatShortDate } from "@/lib/dates";
 import { MEAL_CATEGORY_LABELS, MEAL_CATEGORY_ORDER } from "@/lib/labels";
 import { formatNumber, formatSignedNumber } from "@/lib/units";
 import { movingAverage, weightSummary } from "@/lib/weight";
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const today = todayKey();
+  const today = useToday();
   const settings = useSettings();
 
   const program = useLiveQuery(() => getActiveProgramWithDays(), []);
@@ -46,9 +47,9 @@ export function DashboardPage() {
   const lastCompletion = useLiveQuery(async () => {
     const active = await getActiveProgramWithDays();
     if (!active) return null;
-    const next = nextScheduledDay(active.days, todayKey());
+    const next = nextScheduledDay(active.days, today);
     return next ? getLastCompletionForDay(next.day.id) : null;
-  }, []);
+  }, [today]);
 
   const [picker, setPicker] = useState<{
     date: string;

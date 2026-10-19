@@ -27,12 +27,13 @@ import {
 import {
   formatRelativeDay,
   formatShortDate,
-  todayKey,
   WEEKDAY_NAMES_SHORT,
 } from "@/lib/dates";
+import { useToday } from "@/hooks/use-today";
 
 export function TrainingPage() {
   const navigate = useNavigate();
+  const today = useToday();
   const program = useLiveQuery(() => getActiveProgramWithDays(), []);
   const activeSession = useLiveQuery(() => getActiveSession(), []);
   const recent = useLiveQuery(() => listSessionSummaries(4), []);
@@ -49,7 +50,6 @@ export function TrainingPage() {
 
   if (program === undefined) return <PageSkeleton />;
 
-  const today = todayKey();
   const next = program ? nextScheduledDay(program.days, today) : null;
 
   async function start(dayId: string) {

@@ -162,9 +162,12 @@ describe("weekmenu", () => {
     expect(await getMealsForDate(MONDAY)).toHaveLength(0);
   });
 
-  it("maakt een weekmenu aan voor elke week die je opent", async () => {
+  it("geeft een lege week voor een week zonder plan, zonder iets op te slaan", async () => {
     const future = addDaysToKey(WEEK, 35);
+    const plansBefore = await db.mealPlans.count();
     const plan = await getWeekPlan(future);
+    expect(plan.plan).toBeNull();
+    expect(await db.mealPlans.count()).toBe(plansBefore);
     expect(plan.weekStart).toBe(future);
     expect(plan.days).toHaveLength(7);
     expect(

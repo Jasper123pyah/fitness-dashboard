@@ -8,17 +8,18 @@ import { getWeekPlan } from "@/db/repo/mealPlan";
 import { getActiveProgramWithDays } from "@/db/repo/programs";
 import {
   startOfWeekKey,
-  todayKey,
   weekdayOfKey,
   weekKeys,
   WEEKDAY_NAMES_SHORT,
 } from "@/lib/dates";
+import { useToday } from "@/hooks/use-today";
 import { cn } from "@/lib/utils";
 
 /** De zeven dagen van deze week: wat er gepland staat en wat al gedaan is. */
 export function WeekStrip() {
+  const today = useToday();
+  const weekStart = startOfWeekKey(today);
   const data = useLiveQuery(async () => {
-    const weekStart = startOfWeekKey(todayKey());
     const days = weekKeys(weekStart);
 
     const [program, plan, sessions] = await Promise.all([
@@ -46,11 +47,9 @@ export function WeekStrip() {
         dinner: dinner?.recipe?.name ?? dinner?.customTitle ?? null,
       };
     });
-  }, []);
+  }, [weekStart]);
 
   if (!data) return <CardSkeleton lines={2} />;
-
-  const today = todayKey();
 
   return (
     <ul className="space-y-1">

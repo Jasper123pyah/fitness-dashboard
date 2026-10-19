@@ -3,13 +3,14 @@ import { createId, nowIso } from "../ids";
 import { DEFAULT_SETTINGS } from "../seed";
 import type { AppSettings, HouseholdMember } from "../types";
 
+/**
+ * Leest de instellingen, of de standaardwaarden als die er (nog) niet zijn.
+ * Schrijft niets: dit draait binnen useLiveQuery, waar Dexie schrijven
+ * verbiedt. updateSettings() slaat ze op zodra er iets verandert.
+ */
 export async function getSettings(): Promise<AppSettings> {
   const settings = await db.settings.get("settings");
-  if (settings) return settings;
-
-  const fresh: AppSettings = { ...DEFAULT_SETTINGS, updatedAt: nowIso() };
-  await db.settings.put(fresh);
-  return fresh;
+  return settings ?? { ...DEFAULT_SETTINGS, updatedAt: nowIso() };
 }
 
 export async function updateSettings(

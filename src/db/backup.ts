@@ -8,6 +8,7 @@ import {
   SEED_VERSION,
 } from "./seed-data";
 import type { ProgressPhoto } from "./types";
+import { todayKey } from "@/lib/dates";
 
 export const BACKUP_FORMAT = "trainlog-backup";
 export const BACKUP_VERSION = 1;
@@ -180,7 +181,8 @@ export async function exportBackup(): Promise<BackupFile> {
 export async function downloadBackup(): Promise<string> {
   const backup = await exportBackup();
   const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
-  const fileName = `trainlog-backup-${backup.exportedAt.slice(0, 10)}.json`;
+  // Lokale datum: een back-up om 00:30 hoort bij vandaag, niet bij gisteren (UTC).
+  const fileName = `trainlog-backup-${todayKey(new Date(backup.exportedAt))}.json`;
 
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
