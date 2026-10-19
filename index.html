@@ -143,6 +143,29 @@
             if (action === "reset") resetCache();
           });
           document.body.appendChild(box);
+
+          // Direct zoeken naar een nieuwere versie; komt die binnen, dan
+          // herlaadt de controllerchange-handler hierboven de pagina.
+          if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+            navigator.serviceWorker.getRegistration().then(function (reg) {
+              if (reg) reg.update();
+            });
+          }
+        }
+
+        // Komt er een nieuwe versie binnen terwijl de app niet draait (nog niet
+        // gestart of gecrasht), laad die dan meteen: misschien is de fout daarin
+        // opgelost. Eén keer per sessie, zodat het nooit blijft herladen.
+        if (navigator.serviceWorker) {
+          var hadController = Boolean(navigator.serviceWorker.controller);
+          navigator.serviceWorker.addEventListener("controllerchange", function () {
+            if (!hadController || (window.__trainlogMounted && !shown)) return;
+            try {
+              if (sessionStorage.getItem("trainlog.updateReload")) return;
+              sessionStorage.setItem("trainlog.updateReload", "1");
+            } catch (e) {}
+            location.reload();
+          });
         }
 
         // De app roept dit aan bij een fatale fout; het scherm hangt dan buiten

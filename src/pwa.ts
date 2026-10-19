@@ -107,6 +107,17 @@ export function setupServiceWorker(handlers: {
     }
   });
 
+  // De nieuwe service worker neemt direct over (skipWaiting); deze pagina
+  // draait dan nog op de oude bestanden. Alleen melden als er al een worker
+  // was: bij de allereerste installatie is er niets bij te werken.
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController) return;
+    handlers.onNeedRefresh(async () => {
+      window.location.reload();
+    });
+  });
+
   const updateServiceWorker = registerSW({
     immediate: true,
     onNeedRefresh() {
@@ -127,6 +138,15 @@ export function setupServiceWorker(handlers: {
       } else {
         watchInstall(registration);
       }
+      // Een app op het beginscherm wordt op iOS hervat in plaats van opnieuw
+      // geladen; dan zoekt de browser niet zelf naar een nieuwe versie.
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          registration.update().catch(() => {
+            // Offline: volgende keer weer.
+          });
+        }
+      });
     },
     onRegisterError(error: unknown) {
       setStatus({ offline: { state: "error", message: errorMessage(error) } });

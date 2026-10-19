@@ -66,8 +66,12 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
         navigateFallback: "index.html",
         cleanupOutdatedCaches: true,
-        clientsClaim: false,
-        skipWaiting: false,
+        // Een nieuwe versie neemt meteen over. Met een wachtende worker kon een
+        // app die bij het starten crashte nooit meer bijgewerkt worden: de knop
+        // "Bijwerken" zit in de app zelf. De open pagina herlaadt niet vanzelf;
+        // dat kiest de gebruiker (zie src/pwa.ts). IndexedDB raakt dit niet.
+        clientsClaim: true,
+        skipWaiting: true,
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },
       devOptions: {
